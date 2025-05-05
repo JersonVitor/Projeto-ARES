@@ -1,0 +1,8 @@
+.venv
+/novas_features/
+/src/features/*.pt
+/src/features_teste/*.pt
+/src/features_val/*.pt
+/src/python/__pycache__/
+/src/videos/*.mp4
+src/python/logs/*.log
