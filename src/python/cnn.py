@@ -134,8 +134,9 @@ def initCNN():
 def feature_matrix(dataloader:DataLoader, device, video_id_teste= 3, video_id_val=5):
     extrator = CNNMobileNetV2().to(device=device)
     extrator.eval()
-    loggerCNN.info("Iniciando extração de features usando MobileNetV2")
-    loggerCNN.info('-' * 50)
+    loggerCNN.info(f"batch_id,runtime,vps,fps")
+    tqdm.write("Iniciando extração de features usando MobileNetV2")
+    tqdm.write('-' * 50)
     with torch.no_grad():
         for batch_idx,(videos, labels, names,lengths) in enumerate(tqdm(dataloader, desc="Extraindo batches")):
             start_time = time.time()
@@ -164,26 +165,14 @@ def feature_matrix(dataloader:DataLoader, device, video_id_teste= 3, video_id_va
                 elapsed = time.time() - start_time
                 videos_per_sec = B / elapsed
                 frames_per_sec = (B * T) / elapsed
-                #TODO: ARRUMAR ESSE LOG PARA FICAR COMO UM CSV
-                loggerCNN.info(f"Batch {batch_idx} processado em {elapsed:.2f}s — ")
-                loggerCNN.info(f"{videos_per_sec:.1f} vídeos/s, {frames_per_sec:.1f} frames/s")
+                loggerCNN.info(f"{batch_idx},{elapsed:.2f},{videos_per_sec:.1f},{frames_per_sec:.1f}")
+                tqdm.write(f"Batch {batch_idx} processado em {elapsed:.2f}s — ")
+                tqdm.write(f"{videos_per_sec:.1f} vídeos/s, {frames_per_sec:.1f} frames/s")
             except Exception as e:
                 loggerCNN.error(f"Erro no batch {batch_idx}: {e}", exc_info=True)
             
-        to_csv(const.FEATURES_PATH,const.FEATURES_CSV_PATH)
-        to_csv(const.FEATURES_TESTE_PATH,const.FEATURES_CSV_TEST_PATH)
-        to_csv(const.FEATURES_VAL_PATH,const.FEATURES_CSV_VAL_PATH)
+        utils.to_csv(const.FEATURES_PATH,const.FEATURES_CSV_PATH)
+        utils.to_csv(const.FEATURES_TESTE_PATH,const.FEATURES_CSV_TEST_PATH)
+        utils.to_csv(const.FEATURES_VAL_PATH,const.FEATURES_CSV_VAL_PATH)
     return extrator
             
-def to_csv(path_features, csv_path):
-    name_features = os.listdir(path_features)
-    class_name = []
-    for cl in name_features:
-        pos = re.search('Sinalizador',cl) 
-        class_name.append(cl[2:pos.start()])
-        
-    df = pd.DataFrame({
-        "video_name": name_features,
-        "class": class_name,
-    })
-    df.to_csv(csv_path,index=False)   

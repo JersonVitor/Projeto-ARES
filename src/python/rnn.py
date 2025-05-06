@@ -1,11 +1,17 @@
 #---------- biblioteca padrão ---------- 
+import time
 import utils
 from logger import loggerRNN
 #---------- biblioteca de terceiros ---------- 
 import torch
+import ray
 import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
+from ray import train
+from ray.train import Trainer
+from ray.train.torch import TorchTrainer
+from ray.air.config import ScalingConfig, RunConfig
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
@@ -19,6 +25,7 @@ NUM_LAYERS = 2
 NUM_CLASSES = 20
 DROPOUT = 0.3
 NUM_EPOCHS = 80
+LEARNING_RATE = 1e-3
 
 
 class RNNDataset(Dataset):
@@ -106,10 +113,12 @@ class GRUModel(nn.Module):
 
 
 def train_model(device,model, train_loader, val_loader, num_epochs=15):
-    loggerRNN.info("Treinamento RNN")
-    loggerRNN.info('-' * 50)
+    runtimeCode = time.time()
+    loggerRNN.info(f"epoch,runtime,train_loss,train_acc,val_loss,val_acc")
+    tqdm.write("Treinamento RNN")
+    tqdm.write('-' * 50)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
     # Listas para armazenar métricas
     train_losses = []
@@ -118,6 +127,7 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
     val_accs = []
     
     for epoch in range(num_epochs):
+        runtimeEpoch = time.time()
         # Treino
         model.train()
         running_loss = 0.0
@@ -167,16 +177,17 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
                 val_correct += (predicted == labels).sum().item()
         
         # Métricas de validação
+        runtimeEpoch = time.time() - runtimeEpoch
         epoch_val_loss = val_running_loss / len(val_loader)
         #scheduler.step(epoch_val_loss)
         epoch_val_acc = 100 * val_correct / val_total
         val_losses.append(epoch_val_loss)
         val_accs.append(epoch_val_acc)
-        #TODO: ARRUMAR ESSE LOG TAMBÉM
-        loggerRNN.info(f'Epoch {epoch+1}')
-        loggerRNN.info(f'Train Loss: {epoch_train_loss:.4f} | Train Acc: {epoch_train_acc:.2f}%')
-        loggerRNN.info(f'Val Loss: {epoch_val_loss:.4f} | Val Acc: {epoch_val_acc:.2f}%')
-        loggerRNN.info('-' * 50)
+        loggerRNN.info(f'Epoch {epoch+1},{runtimeEpoch}{epoch_train_loss:.4f},{epoch_train_acc:.2f},{epoch_val_loss:.4f},{epoch_val_acc:.2f}')
+        tqdm.write(f'Train Loss: {epoch_train_loss:.4f} | Train Acc: {epoch_train_acc:.2f}%')
+        tqdm.write(f'Val Loss: {epoch_val_loss:.4f} | Val Acc: {epoch_val_acc:.2f}%')
+        tqdm.write('-' * 50)
+    loggerRNN.info(f"tempo total de execução: {time.time() - runtimeCode}ms")
     return model, train_losses, train_accs, val_losses, val_accs
 
 
@@ -217,8 +228,6 @@ def initRNN():
         collate_fn = RNNDataset.rnn_collate_fn,
         num_workers = const.NUM_WORKERS
     )
-
-    
     
     if const.CUDA and torch.cuda.is_available():
         device = torch.device(const.CUDA_VALUE)
@@ -245,4 +254,173 @@ def initRNN():
                                                                           num_epochs=NUM_EPOCHS)
     utils.save_RNN(gru_model=model_trained, label_map= dataset.idx2label)
     utils.plot_graphic(train_loss,val_loss,train_acc,val_acc)
+    utils.plot_confusion_matrix(model=model_trained,dataloader=loader_teste,dataset=dataset_teste,device=device)
+
     
+def initRNNDistribute():
+    ray.init(address='auto')  # conecta ao head node iniciado externamente
+
+    # Configurações para Ray
+    trainer = TorchTrainer(
+        train_loop_per_worker=train_loop_per_worker,
+        train_loop_config={
+            'batch_size': const.BATCH_SIZE,
+            'lr': LEARNING_RATE,
+            'num_epochs': NUM_EPOCHS,
+            'input_dim': INPUT_DIM,
+            'hidden_dim': HIDDEN_DIM,
+            'num_layers': NUM_LAYERS,
+            'num_classes': NUM_CLASSES,
+            'dropout': DROPOUT,
+            'train_features_csv': const.FEATURES_CSV_PATH,
+            'train_features_dir': const.FEATURES_PATH,
+            'val_features_csv': const.FEATURES_CSV_VAL_PATH,
+            'val_features_dir': const.FEATURES_VAL_PATH
+        },
+        scaling_config=ScalingConfig(
+            num_workers=4,               # ajuste conforme seus nós
+            use_gpu=torch.cuda.is_available()
+        ),
+        run_config=RunConfig(
+            name='distributed_rnn_training',
+            local_dir='./ray_results'
+        )
+    )
+
+    result = trainer.fit()
+    ray.shutdown()
+    if hasattr(const, 'PLOT_ON_HEAD') and const.PLOT_ON_HEAD:
+        metrics = torch.load('training_metrics.pt')
+        utils.plot_graphic(
+            metrics['train_loss'], metrics['val_loss'],
+            metrics['train_acc'], metrics['val_acc']
+        )
+
+# Função de treinamento utilizada por cada worker Ray
+def train_loop_per_worker(config):
+    # Iniciar contagem de tempo
+    runtime_code = time.time()
+
+    # Configurações vindas do config do Ray
+    device = torch.device('cuda' if config.use_gpu and torch.cuda.is_available() else 'cpu')
+
+    # Cria datasets e dataloaders
+    train_dataset = RNNDataset(
+        annotations_file=config.train_features_csv,
+        featuresDir=config.train_features_dir
+    )
+    val_dataset = RNNDataset(
+        annotations_file=config.val_features_csv,
+        featuresDir=config.val_features_dir
+    )
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        pin_memory=config.pin_memory,
+        collate_fn=RNNDataset.rnn_collate_fn,
+        num_workers=config.num_workers
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        pin_memory=config.pin_memory,
+        collate_fn=RNNDataset.rnn_collate_fn,
+        num_workers=config.num_workers
+    )
+
+    # Instancia modelo
+    model = GRUModel(
+        input_dim=config.input_dim,
+        hidden_dim=config.hidden_dim,
+        num_layers=config.num_layers,
+        num_classes=config.num_classes,
+        dropout=config.dropout
+    ).to(device)
+    
+    
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+    train_losses, train_accs, val_losses, val_accs = [], [], [], []
+    for epoch in range(config.num_epochs):
+        runtimeEpoch = time.time()
+        # Treino
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+        
+        for sequences, labels, lengths in train_loader:
+            sequences = sequences.to(device)
+            labels = labels.to(device)
+            
+            # Forward pass
+            outputs = model(sequences, lengths)
+            loss = criterion(outputs, labels)
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            # Estatísticas
+            running_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+        
+        # Métricas de treino
+        epoch_train_loss = running_loss / len(train_loader)
+        epoch_train_acc = 100 * correct / total
+        train_losses.append(epoch_train_loss)
+        train_accs.append(epoch_train_acc)
+        
+        # Validação
+        model.eval()
+        val_running_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        
+        with torch.no_grad():
+            for sequences, labels, lengths in val_loader:
+                sequences = sequences.to(device)
+                labels = labels.to(device)
+                outputs = model(sequences, lengths)
+                loss = criterion(outputs, labels)
+                val_running_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                val_total += labels.size(0)
+                val_correct += (predicted == labels).sum().item()
+        
+        # Métricas de validação
+        runtimeEpoch = time.time() - runtimeEpoch
+        epoch_val_loss = val_running_loss / len(val_loader)
+        #scheduler.step(epoch_val_loss)
+        epoch_val_acc = 100 * val_correct / val_total
+        val_losses.append(epoch_val_loss)
+        val_accs.append(epoch_val_acc)
+        
+        # Report para Ray
+        train.report({
+            'train_loss': epoch_train_loss,
+            'train_acc': epoch_train_acc,
+            'val_loss': epoch_val_loss,
+            'val_acc': epoch_val_acc
+        })
+        loggerRNN.info(f'{epoch+1},{runtimeEpoch}{epoch_train_loss:.4f},{epoch_train_acc:.2f},{epoch_val_loss:.4f},{epoch_val_acc:.2f}')
+
+    # Após treino, salve modelo e métricas
+    # Apenas no worker 0 para evitar conflitos
+    if train.world_rank() == 0:
+        utils.save_RNN(gru_model=model, label_map=train_dataset.idx2label)
+        metrics = {
+        'train_loss': train_losses,
+        'train_acc': train_accs,
+        'val_loss': val_losses,
+        'val_acc': val_accs
+        }
+        torch.save(metrics, 'training_metrics.pt')
+    print(f"Training finished in {time.time() - runtime_code:.2f}s")
+
+

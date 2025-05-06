@@ -19,6 +19,7 @@ def log_file(path, namefile):
     fh.setFormatter(fmt)
     logger.addHandler(ch)
     logger.addHandler(fh)
+    logger.propagate = False
     return logger
     
     

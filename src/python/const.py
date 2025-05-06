@@ -17,6 +17,7 @@ LOG_RNN: Final = "logRNN.log"
 LOG_CNN_PATH: Final = "src/python/logs/logCNN.log"
 LOG_RNN_PATH: Final = "src/python/logs/logRNN.log"
 RNN_GRAPH_PATH: Final = "src/python/logs/graficoRNN.png"
+RNN_MATRIX_PATH: Final = "src/python/logs/matrizRNN.png"
 #---------- strings prompt ----------
 CONFIG_VALUE = "config"
 TEST_VALUE = "test"
@@ -28,6 +29,7 @@ INTEROP_VALUE = "interop"
 CUDAORCPU_VALUE = "cpuCUDA"
 CUDA_VALUE = "cuda"
 CPU_VALUE = "cpu"
+PLOT_ON_HEAD=True
 
 #---------- Configuraçõa de Redes e Threads ----------
 BATCH_SIZE = 8
