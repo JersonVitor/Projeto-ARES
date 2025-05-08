@@ -114,7 +114,8 @@ def main():
             case const.CONFIG_VALUE:
                 config_screen()
             case const.TEST_VALUE:
-                print()
+                cnn.Teste_CNN_Paralelo_forte()
+                cnn.Teste_CNN_Paralelo_Fraco()
             case const.GRU_VALUE:
                 rnn.initRNN()
             case const.CNN_VALUE:

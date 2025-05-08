@@ -86,6 +86,7 @@ def plot_graphic(train_losses,val_losses,train_accs,val_accs):
     
 def to_csv(path_features, csv_path):
     name_features = os.listdir(path_features)
+    print(name_features)
     class_name = []
     for cl in name_features:
         pos = re.search('Sinalizador',cl) 

@@ -1,23 +1,43 @@
 #---------- variáveis Globais ----------
 from typing import Final
+from pathlib import Path
 
-#---------- paths ----------
-MODELS_PATH: Final = "src/saved_models/"
-VIDEOS_PATH: Final = "src/videos/"
-CSV_PATH: Final = "src/videos/annotations.csv"
-FEATURES_PATH: Final = "src/features/" 
-FEATURES_CSV_PATH: Final = "src/features/annotations.csv"
-FEATURES_TESTE_PATH: Final = "src/features_teste/"
-FEATURES_CSV_TEST_PATH: Final = "src/features_teste/annotations.csv"
-FEATURES_VAL_PATH: Final = "src/features_val/"
-FEATURES_CSV_VAL_PATH: Final = "src/features_val/annotations.csv"
-CONFIG_PATH:Final ="src/CONFIG.data" 
+# Base do projeto: src/
+ROOT: Final = Path(__file__).resolve().parents[1]
+
+# Diretórios
+MODELS_PATH: Final = ROOT / "python" / "saved_models"
+VIDEOS_PATH: Final = ROOT / "videos"
+FEATURES_PATH: Final = ROOT / "features"
+FEATURES_VAL_PATH: Final = ROOT / "features_val"
+FEATURES_TESTE_PATH: Final = ROOT / "features_teste"
+LOGS_PATH: Final = ROOT / "python" / "logs"
+TEST_PATH: Final = ROOT/"python" / "test/"
+
+# CSVs
+ONE_THREAD_CSV:Final = TEST_PATH / "csv_test/80_videos.csv"
+TWO_THREAD_CSV:Final = TEST_PATH / "csv_test/160_videos.csv"
+FOUR_THREAD_CSV:Final = TEST_PATH / "csv_test/320_videos.csv"
+EIGHT_THREAD_CSV:Final = TEST_PATH / "csv_test/640_videos.csv"
+CSV_PATH: Final = VIDEOS_PATH / "annotations.csv"
+FEATURES_CSV_PATH: Final = FEATURES_PATH / "annotations.csv"
+FEATURES_CSV_VAL_PATH: Final = FEATURES_VAL_PATH / "annotations.csv"
+FEATURES_CSV_TESTE_PATH: Final = FEATURES_TESTE_PATH / "annotations.csv"
+# Config
+CONFIG_PATH: Final = ROOT / "python" / "CONFIG.data"
+
+# Logs e gráficos
 LOG_CNN: Final = "logCNN.log"
 LOG_RNN: Final = "logRNN.log"
-LOG_CNN_PATH: Final = "src/python/logs/logCNN.log"
-LOG_RNN_PATH: Final = "src/python/logs/logRNN.log"
-RNN_GRAPH_PATH: Final = "src/python/logs/graficoRNN.png"
-RNN_MATRIX_PATH: Final = "src/python/logs/matrizRNN.png"
+LOG_ESC_STRONG: Final = "escalabilidade_forte.csv"
+LOG_ESC_WEAK: Final = "escalabilidade_fraca.csv"
+LOG_CNN_PATH: Final = LOGS_PATH / LOG_CNN
+LOG_RNN_PATH: Final = LOGS_PATH / LOG_RNN
+TEST_ESC_STRONG: Final = TEST_PATH / LOG_ESC_STRONG
+TEST_ESC_WEAK: Final = TEST_PATH / LOG_ESC_WEAK
+RNN_GRAPH_PATH: Final = LOGS_PATH / "graficoRNN.png"
+RNN_MATRIX_PATH: Final = LOGS_PATH / "matrizRNN.png"
+
 #---------- strings prompt ----------
 CONFIG_VALUE = "config"
 TEST_VALUE = "test"
@@ -35,6 +55,6 @@ PLOT_ON_HEAD=True
 BATCH_SIZE = 8
 NUM_WORKERS = 0
 THREADS = 4
-INTEROP = 2
+INTEROP = 1
 PIN_MEMORY = False
 CUDA = False

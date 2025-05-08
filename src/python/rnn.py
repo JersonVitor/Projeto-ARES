@@ -4,12 +4,13 @@ import utils
 from logger import loggerRNN
 #---------- biblioteca de terceiros ---------- 
 import torch
+import os
+from pathlib import Path
 import ray
 import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
 from ray import train
-from ray.train import Trainer
 from ray.train.torch import TorchTrainer
 from ray.air.config import ScalingConfig, RunConfig
 
@@ -30,13 +31,13 @@ LEARNING_RATE = 1e-3
 
 class RNNDataset(Dataset):
     def __init__(self, annotations_file,featuresDir, transform=None, target_transform=None):
-        self.annotations_file = annotations_file
+        self.annotations_file = Path(annotations_file)
         self.labels = self.getLabels()
         classes_em_ordem = list(dict.fromkeys(self.labels["class"]))
         self.label2idx = {classe: i for i, classe in enumerate(classes_em_ordem)}
         self.idx2label = {i: classe for classe, i in self.label2idx.items()}
         self.features = self.getFeaturesNames()
-        self.featuresDir = featuresDir
+        self.featuresDir = Path(featuresDir)
         self.transform = transform
         self.target_transform = target_transform
 
@@ -44,7 +45,8 @@ class RNNDataset(Dataset):
         return len(self.labels)
 
     def __getitem__(self, idx):
-        feature_data = self.extractFeature(self.featuresDir + self.features.iloc[idx, 0])
+        feature_path = self.featuresDir / self.features.iloc[idx, 0]
+        feature_data = self.extractFeature(feature_path)
         features = feature_data['features']
         length = feature_data['length']  # comprimento real (sem padding)
         features = features[:length]  # remove o padding
@@ -217,7 +219,7 @@ def initRNN():
         num_workers = const.NUM_WORKERS
     )
     dataset_teste = RNNDataset(
-        annotations_file=const.FEATURES_CSV_TEST_PATH,
+        annotations_file=const.FEATURES_CSV_TESTE_PATH,
         featuresDir=const.FEATURES_TESTE_PATH
     )
     loader_teste = DataLoader(
@@ -258,9 +260,10 @@ def initRNN():
 
     
 def initRNNDistribute():
-    ray.init(address='auto')  # conecta ao head node iniciado externamente
-
+    ray.init(_node_ip_address='192.168.0.114')
+    #ray.init(address='auto')  # conecta ao head node iniciado externamente
     # Configurações para Ray
+    local_dir_uri = Path("./ray_results").absolute().as_uri()
     trainer = TorchTrainer(
         train_loop_per_worker=train_loop_per_worker,
         train_loop_config={
@@ -269,6 +272,8 @@ def initRNNDistribute():
             'num_epochs': NUM_EPOCHS,
             'input_dim': INPUT_DIM,
             'hidden_dim': HIDDEN_DIM,
+            'num_workers': const.NUM_WORKERS,
+            'pin_memory': const.PIN_MEMORY,
             'num_layers': NUM_LAYERS,
             'num_classes': NUM_CLASSES,
             'dropout': DROPOUT,
@@ -283,7 +288,7 @@ def initRNNDistribute():
         ),
         run_config=RunConfig(
             name='distributed_rnn_training',
-            local_dir='./ray_results'
+            storage_path=local_dir_uri,
         )
     )
 
@@ -302,48 +307,48 @@ def train_loop_per_worker(config):
     runtime_code = time.time()
 
     # Configurações vindas do config do Ray
-    device = torch.device('cuda' if config.use_gpu and torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Cria datasets e dataloaders
     train_dataset = RNNDataset(
-        annotations_file=config.train_features_csv,
-        featuresDir=config.train_features_dir
+        annotations_file=config["train_features_csv"],
+        featuresDir=config["train_features_dir"]
     )
     val_dataset = RNNDataset(
-        annotations_file=config.val_features_csv,
-        featuresDir=config.val_features_dir
+        annotations_file=config["val_features_csv"],
+        featuresDir=config["val_features_dir"]
     )
     train_loader = DataLoader(
         train_dataset,
-        batch_size=config.batch_size,
+        batch_size=config["batch_size"],
         shuffle=True,
-        pin_memory=config.pin_memory,
+        pin_memory=config["pin_memory"],
         collate_fn=RNNDataset.rnn_collate_fn,
-        num_workers=config.num_workers
+        num_workers=config["num_workers"]
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=config.batch_size,
+        batch_size=config["batch_size"],
         shuffle=True,
-        pin_memory=config.pin_memory,
+        pin_memory=config["pin_memory"],
         collate_fn=RNNDataset.rnn_collate_fn,
-        num_workers=config.num_workers
+        num_workers=config["num_workers"]
     )
 
     # Instancia modelo
     model = GRUModel(
-        input_dim=config.input_dim,
-        hidden_dim=config.hidden_dim,
-        num_layers=config.num_layers,
-        num_classes=config.num_classes,
-        dropout=config.dropout
+        input_dim=config["input_dim"],
+        hidden_dim=config["hidden_dim"],
+        num_layers=config["num_layers"],
+        num_classes=config["num_classes"],
+        dropout=config["dropout"]
     ).to(device)
     
     
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
     train_losses, train_accs, val_losses, val_accs = [], [], [], []
-    for epoch in range(config.num_epochs):
+    for epoch in range(config["num_epochs"]):
         runtimeEpoch = time.time()
         # Treino
         model.train()
@@ -408,7 +413,7 @@ def train_loop_per_worker(config):
             'val_loss': epoch_val_loss,
             'val_acc': epoch_val_acc
         })
-        loggerRNN.info(f'{epoch+1},{runtimeEpoch}{epoch_train_loss:.4f},{epoch_train_acc:.2f},{epoch_val_loss:.4f},{epoch_val_acc:.2f}')
+        loggerRNN.info(f'{epoch+1},{runtimeEpoch:.2f},{epoch_train_loss:.4f},{epoch_train_acc:.2f},{epoch_val_loss:.4f},{epoch_val_acc:.2f}')
 
     # Após treino, salve modelo e métricas
     # Apenas no worker 0 para evitar conflitos
