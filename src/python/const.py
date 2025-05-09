@@ -7,6 +7,8 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 
 # Diretórios
 MODELS_PATH: Final = ROOT / "python" / "saved_models"
+CNN_PATH: Final = ROOT / "python" / "saved_models/cnn_model.pt"
+RNN_PATH: Final = ROOT / "python" / "saved_models/gru_model.pt"
 VIDEOS_PATH: Final = ROOT / "videos"
 FEATURES_PATH: Final = ROOT / "features"
 FEATURES_VAL_PATH: Final = ROOT / "features_val"
@@ -52,9 +54,9 @@ CPU_VALUE = "cpu"
 PLOT_ON_HEAD=True
 
 #---------- Configuraçõa de Redes e Threads ----------
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 NUM_WORKERS = 0
 THREADS = 4
 INTEROP = 1
-PIN_MEMORY = False
-CUDA = False
+PIN_MEMORY = True
+CUDA = True

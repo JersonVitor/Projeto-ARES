@@ -154,11 +154,11 @@ def feature_matrix(dataloader:DataLoader, device, video_id_teste= 3, video_id_va
                     real_T = lengths[i] 
                     x = re.search('-',video_name)
                     chave = int(video_name[x.end()])
-                    out_path = f"{const.FEATURES_PATH}{video_name}.pt"  
+                    out_path = f"{const.FEATURES_PATH}/{video_name}.pt"  
                     if chave % video_id_val == 0:
-                        out_path = f"{const.FEATURES_VAL_PATH}{video_name}.pt"    
+                        out_path = f"{const.FEATURES_VAL_PATH}/{video_name}.pt"    
                     elif chave % video_id_teste == 0:
-                        out_path = f"{const.FEATURES_TESTE_PATH}{video_name}.pt"
+                        out_path = f"{const.FEATURES_TESTE_PATH}/{video_name}.pt"
                     torch.save({
                             'features': feats[i],
                             'length': real_T

@@ -10,9 +10,6 @@ import ray
 import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
-from ray import train
-from ray.train.torch import TorchTrainer
-from ray.air.config import ScalingConfig, RunConfig
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
@@ -24,9 +21,9 @@ INPUT_DIM = 1280
 HIDDEN_DIM = 512
 NUM_LAYERS = 2
 NUM_CLASSES = 20
-DROPOUT = 0.3
+DROPOUT = 0.2
 NUM_EPOCHS = 80
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 0,001
 
 
 class RNNDataset(Dataset):
@@ -78,7 +75,7 @@ class RNNDataset(Dataset):
         return padded_sequences, labels, lengths
 
 class GRUModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, num_classes, dropout = 0.3):
+    def __init__(self, input_dim, hidden_dim, num_layers, num_classes, dropout = 0.2):
         super(GRUModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -91,7 +88,7 @@ class GRUModel(nn.Module):
             batch_first=True,
             bidirectional=False
         )
-        #self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x, lengths):
@@ -107,7 +104,7 @@ class GRUModel(nn.Module):
         last_hidden = hidden[-1] 
 
         # Aplica dropout sobre esse vetor
-        #last_hidden = self.dropout(last_hidden)
+        last_hidden = self.dropout(last_hidden)
 
         # Classificador final
         out = self.fc(last_hidden)
