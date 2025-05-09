@@ -1,12 +1,15 @@
 #---------- biblioteca padrão ---------- 
 import os
 import re
+
 import numpy as np
 import pandas as pd
 import const
 import matplotlib.pyplot as plt
 import seaborn as sns
+from torch import tensor
 from tqdm import tqdm
+from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import confusion_matrix, classification_report
 
 #---------- biblioteca de terceiros ---------- 
@@ -108,8 +111,10 @@ def plot_confusion_matrix(model, dataloader, dataset, device):
         for sequences, labels, lengths in tqdm(dataloader, desc="Gerando matriz de confusão"):
             sequences = sequences.to(device)
             labels = labels.to(device)
-            
-            outputs = model(sequences, lengths)
+            lengths_t = tensor(lengths, dtype=torch.long, device=device)
+
+            outputs = model(sequences, lengths_t)
+
             _, preds = torch.max(outputs, 1)
             
             all_preds.extend(preds.cpu().numpy())
@@ -151,3 +156,28 @@ def plot_confusion_matrix(model, dataloader, dataset, device):
     #plt.tight_layout()
     #plt.savefig(const.RNN_GRAPH_PATH)
     #plt.show()
+
+def Matriz():
+    import rnn
+    model_rnn, _ = load_RNN()
+    dataset = rnn.RNNDataset(
+        annotations_file = const.FEATURES_CSV_PATH,
+        featuresDir= const.FEATURES_PATH
+    )
+    datasetlabel = dataset.label2idx
+    dataset_teste = rnn.RNNDataset(
+        annotations_file=const.FEATURES_CSV_VAL_PATH,
+        featuresDir=const.FEATURES_VAL_PATH, label2idx=datasetlabel
+    )
+    loader_teste = DataLoader(
+        dataset_teste,
+        batch_size = const.BATCH_SIZE,
+        shuffle = True,
+        pin_memory = const.PIN_MEMORY,
+        collate_fn = dataset_teste.rnn_collate_fn,
+        num_workers = const.NUM_WORKERS
+    )
+    plot_confusion_matrix(model_rnn,loader_teste,dataset,device='cpu')
+    
+if __name__ == "__main__":
+    Matriz()

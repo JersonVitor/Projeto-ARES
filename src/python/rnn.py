@@ -1,6 +1,6 @@
 #---------- biblioteca padrão ---------- 
 import time
-import utils
+
 from logger import loggerRNN
 #---------- biblioteca de terceiros ---------- 
 import torch
@@ -21,18 +21,22 @@ INPUT_DIM = 1280
 HIDDEN_DIM = 512
 NUM_LAYERS = 2
 NUM_CLASSES = 20
-DROPOUT = 0.2
+DROPOUT = 0.3
 NUM_EPOCHS = 80
-LEARNING_RATE = 0,001
+LEARNING_RATE = 0.00001
 
 
 class RNNDataset(Dataset):
-    def __init__(self, annotations_file,featuresDir, transform=None, target_transform=None):
+    def __init__(self, annotations_file,featuresDir, transform=None, target_transform=None, label2idx=None):
         self.annotations_file = Path(annotations_file)
         self.labels = self.getLabels()
         classes_em_ordem = list(dict.fromkeys(self.labels["class"]))
-        self.label2idx = {classe: i for i, classe in enumerate(classes_em_ordem)}
-        self.idx2label = {i: classe for classe, i in self.label2idx.items()}
+        if label2idx is None:
+            classes = list(dict.fromkeys(self.labels["class"]))
+            self.label2idx = {c: i for i, c in enumerate(classes)}
+        else:
+            self.label2idx = label2idx
+        self.idx2label = {v: k for k, v in self.label2idx.items()}
         self.features = self.getFeaturesNames()
         self.featuresDir = Path(featuresDir)
         self.transform = transform
@@ -67,7 +71,7 @@ class RNNDataset(Dataset):
     def extractFeature(self, path):
         return torch.load(path)
 
-    def rnn_collate_fn(batch):
+    def rnn_collate_fn(self,batch):
         sequences, labels = zip(*batch)
         lengths = [seq.shape[0] for seq in sequences]
         padded_sequences = pad_sequence(sequences, batch_first=True, padding_value=0)
@@ -75,7 +79,7 @@ class RNNDataset(Dataset):
         return padded_sequences, labels, lengths
 
 class GRUModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, num_classes, dropout = 0.2):
+    def __init__(self, input_dim, hidden_dim, num_layers, num_classes, dropout = 0.3):
         super(GRUModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -88,27 +92,22 @@ class GRUModel(nn.Module):
             batch_first=True,
             bidirectional=False
         )
-        self.dropout = nn.Dropout(dropout)
+        #self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x, lengths):
-        # Empacotar sequências para otimização
-        packed = nn.utils.rnn.pack_padded_sequence(
-            x,
-            lengths=lengths,
-            batch_first=True,
-            enforce_sorted=False
-        )
-        
-        packed_output, hidden = self.gru(packed)
-        last_hidden = hidden[-1] 
+            # Empacotar sequências para otimização
+            packed = nn.utils.rnn.pack_padded_sequence(
+                x,
+                lengths=lengths,
+                batch_first=True,
+                enforce_sorted=False
+            )
 
-        # Aplica dropout sobre esse vetor
-        last_hidden = self.dropout(last_hidden)
-
-        # Classificador final
-        out = self.fc(last_hidden)
-        return out
+            # Forward pass pela GRU
+            output, hidden = self.gru(packed)
+            out = self.fc(hidden[-1, :, :])
+            return out
 
 
 def train_model(device,model, train_loader, val_loader, num_epochs=15):
@@ -195,6 +194,7 @@ def initRNN():
         annotations_file = const.FEATURES_CSV_PATH,
         featuresDir= const.FEATURES_PATH
     )
+    datasetlabel = dataset.label2idx
     loader = DataLoader(
         dataset,
         batch_size = const.BATCH_SIZE,
@@ -205,7 +205,7 @@ def initRNN():
     )
     dataset_val = RNNDataset(
         annotations_file=const.FEATURES_CSV_VAL_PATH,
-        featuresDir=const.FEATURES_VAL_PATH
+        featuresDir=const.FEATURES_VAL_PATH, label2idx=datasetlabel
     )
     loader_val = DataLoader(
         dataset_val,
@@ -217,7 +217,7 @@ def initRNN():
     )
     dataset_teste = RNNDataset(
         annotations_file=const.FEATURES_CSV_TESTE_PATH,
-        featuresDir=const.FEATURES_TESTE_PATH
+        featuresDir=const.FEATURES_TESTE_PATH, label2idx=datasetlabel
     )
     loader_teste = DataLoader(
         dataset_teste,
