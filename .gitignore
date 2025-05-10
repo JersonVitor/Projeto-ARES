@@ -7,3 +7,4 @@
 /src/videos/*.mp4
 src/python/logs/*.log
 src/ray_results/
+.vscode
