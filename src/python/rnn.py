@@ -2,6 +2,7 @@
 import time
 
 from logger import loggerRNN
+import utils
 #---------- biblioteca de terceiros ---------- 
 import torch
 import os
@@ -23,14 +24,14 @@ NUM_LAYERS = 2
 NUM_CLASSES = 20
 DROPOUT = 0.3
 NUM_EPOCHS = 80
-LEARNING_RATE = 0.00001
+LEARNING_RATE = 0.01
 
 
 class RNNDataset(Dataset):
     def __init__(self, annotations_file,featuresDir, transform=None, target_transform=None, label2idx=None):
         self.annotations_file = Path(annotations_file)
         self.labels = self.getLabels()
-        classes_em_ordem = list(dict.fromkeys(self.labels["class"]))
+        #classes_em_ordem = list(dict.fromkeys(self.labels["class"]))
         if label2idx is None:
             classes = list(dict.fromkeys(self.labels["class"]))
             self.label2idx = {c: i for i, c in enumerate(classes)}
@@ -92,7 +93,7 @@ class GRUModel(nn.Module):
             batch_first=True,
             bidirectional=False
         )
-        #self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x, lengths):
@@ -106,6 +107,7 @@ class GRUModel(nn.Module):
 
             # Forward pass pela GRU
             output, hidden = self.gru(packed)
+            hidden = self.dropout(hidden)
             out = self.fc(hidden[-1, :, :])
             return out
 
@@ -117,7 +119,7 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
     tqdm.write('-' * 50)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5, verbose=True)
     # Listas para armazenar métricas
     train_losses = []
     train_accs = []
@@ -177,7 +179,7 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
         # Métricas de validação
         runtimeEpoch = time.time() - runtimeEpoch
         epoch_val_loss = val_running_loss / len(val_loader)
-        #scheduler.step(epoch_val_loss)
+        scheduler.step(epoch_val_loss)
         epoch_val_acc = 100 * val_correct / val_total
         val_losses.append(epoch_val_loss)
         val_accs.append(epoch_val_acc)

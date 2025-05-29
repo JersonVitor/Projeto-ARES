@@ -8,3 +8,4 @@
 src/python/logs/*.log
 src/ray_results/
 .vscode
+/src/videos/*.zip
