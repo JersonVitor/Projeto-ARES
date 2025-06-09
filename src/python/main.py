@@ -32,14 +32,6 @@ from sklearn.metrics import confusion_matrix, classification_report
 #---------- variáveis Globais ----------
 import const
 
-#---------- Configuração paralelismo ----------
-BATCH_SIZE = 4
-NUM_WORKERS = 0
-
-
-
-
-
 
 def config_screen():
     resp = config_template()

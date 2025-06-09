@@ -54,7 +54,7 @@ CPU_VALUE = "cpu"
 PLOT_ON_HEAD=True
 
 #---------- Configuraçõa de Redes e Threads ----------
-BATCH_SIZE = 4
+BATCH_SIZE = 2
 NUM_WORKERS = 0
 THREADS = 4
 INTEROP = 2

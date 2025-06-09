@@ -72,7 +72,7 @@ class RNNDataset(Dataset):
     def extractFeature(self, path):
         return torch.load(path)
 
-    def rnn_collate_fn(self,batch):
+    def rnn_collate_fn(batch):
         sequences, labels = zip(*batch)
         lengths = [seq.shape[0] for seq in sequences]
         padded_sequences = pad_sequence(sequences, batch_first=True, padding_value=0)
@@ -119,7 +119,7 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
     tqdm.write('-' * 50)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5, verbose=True)
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5)
     # Listas para armazenar métricas
     train_losses = []
     train_accs = []
@@ -179,7 +179,7 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
         # Métricas de validação
         runtimeEpoch = time.time() - runtimeEpoch
         epoch_val_loss = val_running_loss / len(val_loader)
-        scheduler.step(epoch_val_loss)
+    #scheduler.step(epoch_val_loss)
         epoch_val_acc = 100 * val_correct / val_total
         val_losses.append(epoch_val_loss)
         val_accs.append(epoch_val_acc)
