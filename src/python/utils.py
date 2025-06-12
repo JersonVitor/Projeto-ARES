@@ -18,14 +18,12 @@ def load_CNN( save_dir= const.MODELS_PATH, device='cpu'):
     checkpoint = torch.load(os.path.join(save_dir, "models_checkpoint.pth"), map_location=device)
     label_map = checkpoint['label_map']
     cnn_model = torch.jit.load(os.path.join(save_dir, "cnn_model.pt"), map_location=device)
-    cnn_model.load_state_dict(checkpoint['cnn_state_dict'])
     return cnn_model, label_map
 
 def load_RNN(save_dir= const.MODELS_PATH, device='cpu'):
     checkpoint = torch.load(os.path.join(save_dir, "models_checkpoint.pth"), map_location=device)
     label_map = checkpoint['label_map']
     gru_model = torch.jit.load(os.path.join(save_dir, "gru_model.pt"), map_location=device)
-    gru_model.load_state_dict(checkpoint['gru_state_dict'])
     return gru_model, label_map
 
 
@@ -111,7 +109,8 @@ def plot_confusion_matrix(model, dataloader, dataset, device):
         for sequences, labels, lengths in tqdm(dataloader, desc="Gerando matriz de confusão"):
             sequences = sequences.to(device)
             labels = labels.to(device)
-            lengths_t = tensor(lengths, dtype=torch.long, device=device)
+            # lengths deve ficar em CPU, int64
+            lengths_t = torch.tensor(lengths, dtype=torch.long)
 
             outputs = model(sequences, lengths_t)
 

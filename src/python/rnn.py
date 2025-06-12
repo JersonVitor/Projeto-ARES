@@ -75,6 +75,8 @@ class RNNDataset(Dataset):
     def rnn_collate_fn(batch):
         sequences, labels = zip(*batch)
         lengths = [seq.shape[0] for seq in sequences]
+        # converte lengths para CPU-int64 tensor
+        lengths = torch.tensor(lengths, dtype=torch.int64)
         padded_sequences = pad_sequence(sequences, batch_first=True, padding_value=0)
         labels = torch.tensor(labels, dtype=torch.long)
         return padded_sequences, labels, lengths
@@ -93,7 +95,7 @@ class GRUModel(nn.Module):
             batch_first=True,
             bidirectional=False
         )
-        self.dropout = nn.Dropout(dropout)
+        #self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x, lengths):
@@ -107,7 +109,7 @@ class GRUModel(nn.Module):
 
             # Forward pass pela GRU
             output, hidden = self.gru(packed)
-            hidden = self.dropout(hidden)
+            #hidden = self.dropout(hidden)
             out = self.fc(hidden[-1, :, :])
             return out
 
@@ -119,7 +121,7 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
     tqdm.write('-' * 50)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5)
     # Listas para armazenar métricas
     train_losses = []
     train_accs = []
@@ -179,7 +181,7 @@ def train_model(device,model, train_loader, val_loader, num_epochs=15):
         # Métricas de validação
         runtimeEpoch = time.time() - runtimeEpoch
         epoch_val_loss = val_running_loss / len(val_loader)
-    #scheduler.step(epoch_val_loss)
+        scheduler.step(epoch_val_loss)
         epoch_val_acc = 100 * val_correct / val_total
         val_losses.append(epoch_val_loss)
         val_accs.append(epoch_val_acc)

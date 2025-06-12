@@ -206,7 +206,7 @@ def run_execution(num_thread, videos_path = const.CSV_PATH ):
 
 
 def Teste_CNN_Paralelo_forte():
-    torch.set_num_interop_threads(1)
+   
     results = []
     threads = [1,2,4,8]
     print("Iniciando extração de features usando MobileNetV2 com escalabilidade forte")
