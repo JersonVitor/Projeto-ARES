@@ -3,8 +3,8 @@ import re
 import os
 import time
 from pathlib import Path
-import utils
-from logger import loggerCNN
+import src.python.utils as utils
+from src.python.logger import loggerCNN
 #---------- biblioteca de terceiros ---------- 
 import cv2
 import torch
@@ -17,7 +17,7 @@ from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 
 #---------- variáveis Globais ----------
-import const
+import src.python.const as const
 
 
 class CNNDataset(Dataset):

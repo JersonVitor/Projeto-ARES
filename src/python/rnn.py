@@ -1,8 +1,8 @@
 #---------- biblioteca padrão ---------- 
 import time
 
-from logger import loggerRNN
-import utils
+from src.python.logger import loggerRNN
+import src.python.utils as utils
 #---------- biblioteca de terceiros ---------- 
 import torch
 import os
@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 
 #---------- variáveis Globais ----------
-import const
+import src.python.const as const
 
 INPUT_DIM = 1280 
 HIDDEN_DIM = 512
@@ -260,173 +260,4 @@ def initRNN():
     utils.plot_confusion_matrix(model=model_trained,dataloader=loader_teste,dataset=dataset_teste,device=device)
 
     
-def initRNNDistribute():
-    ray.init(_node_ip_address='192.168.0.114')
-    #ray.init(address='auto')  # conecta ao head node iniciado externamente
-    # Configurações para Ray
-    local_dir_uri = Path("./ray_results").absolute().as_uri()
-    trainer = TorchTrainer(
-        train_loop_per_worker=train_loop_per_worker,
-        train_loop_config={
-            'batch_size': const.BATCH_SIZE,
-            'lr': LEARNING_RATE,
-            'num_epochs': NUM_EPOCHS,
-            'input_dim': INPUT_DIM,
-            'hidden_dim': HIDDEN_DIM,
-            'num_workers': const.NUM_WORKERS,
-            'pin_memory': const.PIN_MEMORY,
-            'num_layers': NUM_LAYERS,
-            'num_classes': NUM_CLASSES,
-            'dropout': DROPOUT,
-            'train_features_csv': const.FEATURES_CSV_PATH,
-            'train_features_dir': const.FEATURES_PATH,
-            'val_features_csv': const.FEATURES_CSV_VAL_PATH,
-            'val_features_dir': const.FEATURES_VAL_PATH
-        },
-        scaling_config=ScalingConfig(
-            num_workers=4,               # ajuste conforme seus nós
-            use_gpu=torch.cuda.is_available()
-        ),
-        run_config=RunConfig(
-            name='distributed_rnn_training',
-            storage_path=local_dir_uri,
-        )
-    )
-
-    result = trainer.fit()
-    ray.shutdown()
-    if hasattr(const, 'PLOT_ON_HEAD') and const.PLOT_ON_HEAD:
-        metrics = torch.load('training_metrics.pt')
-        utils.plot_graphic(
-            metrics['train_loss'], metrics['val_loss'],
-            metrics['train_acc'], metrics['val_acc']
-        )
-
-# Função de treinamento utilizada por cada worker Ray
-def train_loop_per_worker(config):
-    # Iniciar contagem de tempo
-    runtime_code = time.time()
-
-    # Configurações vindas do config do Ray
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    # Cria datasets e dataloaders
-    train_dataset = RNNDataset(
-        annotations_file=config["train_features_csv"],
-        featuresDir=config["train_features_dir"]
-    )
-    val_dataset = RNNDataset(
-        annotations_file=config["val_features_csv"],
-        featuresDir=config["val_features_dir"]
-    )
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config["batch_size"],
-        shuffle=True,
-        pin_memory=config["pin_memory"],
-        collate_fn=RNNDataset.rnn_collate_fn,
-        num_workers=config["num_workers"]
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=config["batch_size"],
-        shuffle=True,
-        pin_memory=config["pin_memory"],
-        collate_fn=RNNDataset.rnn_collate_fn,
-        num_workers=config["num_workers"]
-    )
-
-    # Instancia modelo
-    model = GRUModel(
-        input_dim=config["input_dim"],
-        hidden_dim=config["hidden_dim"],
-        num_layers=config["num_layers"],
-        num_classes=config["num_classes"],
-        dropout=config["dropout"]
-    ).to(device)
-    
-    
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
-    train_losses, train_accs, val_losses, val_accs = [], [], [], []
-    for epoch in range(config["num_epochs"]):
-        runtimeEpoch = time.time()
-        # Treino
-        model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        
-        for sequences, labels, lengths in train_loader:
-            sequences = sequences.to(device)
-            labels = labels.to(device)
-            
-            # Forward pass
-            outputs = model(sequences, lengths)
-            loss = criterion(outputs, labels)
-            
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-            # Estatísticas
-            running_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-        
-        # Métricas de treino
-        epoch_train_loss = running_loss / len(train_loader)
-        epoch_train_acc = 100 * correct / total
-        train_losses.append(epoch_train_loss)
-        train_accs.append(epoch_train_acc)
-        
-        # Validação
-        model.eval()
-        val_running_loss = 0.0
-        val_correct = 0
-        val_total = 0
-        
-        with torch.no_grad():
-            for sequences, labels, lengths in val_loader:
-                sequences = sequences.to(device)
-                labels = labels.to(device)
-                outputs = model(sequences, lengths)
-                loss = criterion(outputs, labels)
-                val_running_loss += loss.item()
-                _, predicted = torch.max(outputs.data, 1)
-                val_total += labels.size(0)
-                val_correct += (predicted == labels).sum().item()
-        
-        # Métricas de validação
-        runtimeEpoch = time.time() - runtimeEpoch
-        epoch_val_loss = val_running_loss / len(val_loader)
-        #scheduler.step(epoch_val_loss)
-        epoch_val_acc = 100 * val_correct / val_total
-        val_losses.append(epoch_val_loss)
-        val_accs.append(epoch_val_acc)
-        
-        # Report para Ray
-        train.report({
-            'train_loss': epoch_train_loss,
-            'train_acc': epoch_train_acc,
-            'val_loss': epoch_val_loss,
-            'val_acc': epoch_val_acc
-        })
-        loggerRNN.info(f'{epoch+1},{runtimeEpoch:.2f},{epoch_train_loss:.4f},{epoch_train_acc:.2f},{epoch_val_loss:.4f},{epoch_val_acc:.2f}')
-
-    # Após treino, salve modelo e métricas
-    # Apenas no worker 0 para evitar conflitos
-    if train.world_rank() == 0:
-        utils.save_RNN(gru_model=model, label_map=train_dataset.idx2label)
-        metrics = {
-        'train_loss': train_losses,
-        'train_acc': train_accs,
-        'val_loss': val_losses,
-        'val_acc': val_accs
-        }
-        torch.save(metrics, 'training_metrics.pt')
-    print(f"Training finished in {time.time() - runtime_code:.2f}s")
-
 

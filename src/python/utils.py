@@ -4,7 +4,7 @@ import re
 
 import numpy as np
 import pandas as pd
-import const
+import src.python.const as const
 import matplotlib.pyplot as plt
 import seaborn as sns
 from torch import tensor
