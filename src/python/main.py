@@ -105,8 +105,8 @@ def main():
             case const.CONFIG_VALUE:
                 config_screen()
             case const.TEST_VALUE:
-                cnn.Teste_CNN_Paralelo_forte()
-                cnn.Teste_CNN_Paralelo_Fraco()
+                cnn.Teste_CNN_GPU_EscalaForte()
+                cnn.Teste_CNN_GPU_EscalaFraca()
             case const.GRU_VALUE:
                 rnn.initRNN()
             case const.CNN_VALUE:

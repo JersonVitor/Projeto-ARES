@@ -178,7 +178,7 @@ def feature_matrix(dataloader:DataLoader, device, video_id_teste= 3, video_id_va
         utils.to_csv(const.FEATURES_VAL_PATH,const.FEATURES_CSV_VAL_PATH)
     return extrator
             
-def run_execution(num_thread, videos_path = const.CSV_PATH ):
+def run_execution(num_thread, videos_path = const.SCALE_STRONG_CSV ):
     torch.set_num_threads(num_thread)
     device = torch.device('cpu')
     
@@ -255,7 +255,62 @@ def Teste_CNN_Paralelo_Fraco():
     })
     df = pd.DataFrame(results)
     df.to_csv(const.TEST_ESC_WEAK)
+
     
+def Teste_CNN_GPU_EscalaForte():
+    print("Iniciando extração de features na GPU (escalabilidade forte)")
+    print('-' * 50)
+    
+    results = []
+    for i in range(4):  # repetir o mesmo teste para observar variação
+        print(f"Execução {i+1}")
+        total_time = run_execution_gpu()
+        results.append({"execucao": i+1, "total_time": total_time})
+
+    df = pd.DataFrame(results)
+    df.to_csv("gpu_scalabilidade_forte.csv")
+def Teste_CNN_GPU_EscalaFraca():
+    print("Iniciando extração de features na GPU (escalabilidade fraca)")
+    print('-' * 50)
+
+    
+    bases = [const.ONE_THREAD_CSV, const.TWO_THREAD_CSV, const.FOUR_THREAD_CSV, const.EIGHT_THREAD_CSV]
+
+    results = []
+    for mult, base in zip(bases):
+        print(f"Tamanho base x{mult}")
+        total_time = run_execution_gpu(base)
+        results.append({"base_x": mult, "total_time": total_time})
+
+    df = pd.DataFrame(results)
+    df.to_csv("gpu_scalabilidade_fraca.csv")
+def run_execution_gpu(videos_path=const.SCALE_STRONG_CSV):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((112,112)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    dataset = CNNDataset(
+        annotations_file=videos_path,
+        videosDir=const.VIDEOS_PATH,
+        transform=transform
+    )
+
+    loader = DataLoader(
+        dataset,
+        batch_size=const.BATCH_SIZE,
+        num_workers=const.NUM_WORKERS,
+        pin_memory=True,
+        collate_fn=CNNDataset.collate_fn
+    )
+
+    start_time = time.time()
+    feature_matrix_test(dataloader=loader, device=device)
+    return time.time() - start_time
 def feature_matrix_test(dataloader:DataLoader, device, video_id_teste= 3, video_id_val=5):
     extrator = CNNMobileNetV2().to(device=device)
     extrator.eval()
